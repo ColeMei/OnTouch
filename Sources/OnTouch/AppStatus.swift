@@ -18,11 +18,16 @@ final class AppStatus: ObservableObject {
     @Published private(set) var trackpads = 0
     @Published private(set) var lastGesture: LastGesture?
     @Published private(set) var configIssues: [String] = []
+    @Published private(set) var config = Config()
+    /// The user's on/off switch; false while paused too.
+    @Published private(set) var gesturesOn = true
+    @Published private(set) var pausedUntil: Date?
 
     /// True when gestures can actually reach apps.
     var isWorking: Bool { accessibility && inputMonitoring && trackpads > 0 }
 
     private var timer: Timer?
+    private var resumeTimer: Timer?
 
     /// Permissions have no change notifications, so poll — cheaply, and only
     /// publish when something actually changed.
@@ -50,8 +55,26 @@ final class AppStatus: ObservableObject {
         if count != trackpads { trackpads = count }
     }
 
-    func setConfigIssues(_ issues: [String]) {
-        if issues != configIssues { configIssues = issues }
+    func configChanged(_ store: ConfigStore) {
+        config = store.current
+        if store.issues != configIssues { configIssues = store.issues }
+    }
+
+    // MARK: On / off / pause
+
+    func setGesturesOn(_ on: Bool) {
+        resumeTimer?.invalidate()
+        pausedUntil = nil
+        gesturesOn = on
+        GestureEngine.shared.enabled = on
+    }
+
+    func pause(for seconds: TimeInterval) {
+        setGesturesOn(false)
+        pausedUntil = Date().addingTimeInterval(seconds)
+        resumeTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
+            self?.setGesturesOn(true)
+        }
     }
 
     func recordGesture(action: String, app: String?) {

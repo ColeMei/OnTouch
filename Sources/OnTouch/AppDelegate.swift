@@ -1,138 +1,104 @@
 import AppKit
 import ApplicationServices
-import ServiceManagement
+import Combine
+import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
+    private let popover = NSPopover()
     private let reader = MultitouchReader()
     private let typingMonitor = TypingMonitor()
     private let scrollMonitor = ScrollMonitor()
     private let clickSuppressor = ClickSuppressor()
-    private var enableItem: NSMenuItem!
-    private var loginItem: NSMenuItem!
+    private var subscriptions = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        ConfigStore.shared.onChange = { AppStatus.shared.setConfigIssues(ConfigStore.shared.issues) }
+        let status = AppStatus.shared
+        ConfigStore.shared.onChange = { status.configChanged(ConfigStore.shared) }
         ConfigStore.shared.start()
-        reader.onChange = { AppStatus.shared.setTrackpads($0) }
+        reader.onChange = { status.setTrackpads($0) }
 
-        setupMenu()
+        setupStatusItem()
         promptForAccessibility()
-        AppStatus.shared.start()
+        status.start()
         typingMonitor.start()
         scrollMonitor.start()
         clickSuppressor.start()
         if !reader.start() {
             NSLog("OnTouch: no multitouch device — check Input Monitoring permission")
         }
+        observe(status)
     }
 
     // MARK: Menu bar
 
-    private func setupMenu() {
+    private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem.button {
-            button.image = Self.brandImage()
-            button.imagePosition = .imageOnly
-            button.toolTip = "OnTouch"
-        }
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(togglePopover)
+        updateIcon()
 
-        let menu = NSMenu()
-        enableItem = NSMenuItem(title: "Gestures Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
-        enableItem.state = .on
-        enableItem.target = self
-        menu.addItem(enableItem)
-        menu.addItem(.separator())
-
-        for line in ["Hold a finger, tap left/right = prev/next tab",
-                     "Hold a finger, 2-finger swipe down = close tab",
-                     "Customize: ~/.config/ontouch/config.json"] {
-            let item = NSMenuItem(title: line, action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            menu.addItem(item)
-        }
-        menu.addItem(.separator())
-
-        loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        loginItem.target = self
-        menu.addItem(loginItem)
-        refreshLoginItem()
-        menu.addItem(.separator())
-
-        let ax = NSMenuItem(title: "Open Accessibility Settings…", action: #selector(openAccessibility), keyEquivalent: "")
-        ax.target = self
-        menu.addItem(ax)
-        let im = NSMenuItem(title: "Open Input Monitoring Settings…", action: #selector(openInputMonitoring), keyEquivalent: "")
-        im.target = self
-        menu.addItem(im)
-        menu.addItem(.separator())
-
-        let quit = NSMenuItem(title: "Quit OnTouch", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        menu.addItem(quit)
-
-        statusItem.menu = menu
+        let actions = PopoverActions(
+            openSettings: { [weak self] in self?.closePopover(); Self.showConfigFile() },
+            openPrivacyPane: { [weak self] pane in self?.closePopover(); Self.openPane(pane) },
+            showConfigFile: { [weak self] in self?.closePopover(); Self.showConfigFile() },
+            quit: { NSApp.terminate(nil) }
+        )
+        popover.behavior = .transient
+        popover.animates = false
+        popover.contentViewController = NSHostingController(
+            rootView: MenuPopover(status: AppStatus.shared, actions: actions))
     }
 
-    /// A monochrome "On" wordmark for the menu bar, matching the app icon. As a
-    /// template image, macOS tints it correctly for light/dark menu bars.
-    private static func brandImage() -> NSImage {
-        let text = "On" as NSString
-        let font = NSFont.systemFont(ofSize: 14, weight: .heavy)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
-        let size = text.size(withAttributes: attrs)
-        let image = NSImage(size: NSSize(width: ceil(size.width) + 2, height: ceil(size.height)))
-        image.lockFocus()
-        text.draw(at: NSPoint(x: 1, y: 0), withAttributes: attrs)
-        image.unlockFocus()
-        image.isTemplate = true
-        return image
-    }
-
-    @objc private func toggleEnabled() {
-        GestureEngine.shared.enabled.toggle()
-        enableItem.state = GestureEngine.shared.enabled ? .on : .off
-    }
-
-    // MARK: Launch at login
-
-    /// Only the installed copy may register itself — a dev build run from the
-    /// repo would otherwise become the login item.
-    private var isInstalled: Bool {
-        let path = Bundle.main.bundlePath
-        return path.hasPrefix("/Applications/")
-            || path.hasPrefix(NSHomeDirectory() + "/Applications/")
-    }
-
-    private func refreshLoginItem() {
-        guard isInstalled else {
-            loginItem.title = "Launch at Login (run ./install.sh first)"
-            loginItem.action = nil      // menus auto-enable items that have an action
-            loginItem.state = .off
-            return
-        }
-        switch SMAppService.mainApp.status {
-        case .enabled:          loginItem.state = .on;    loginItem.title = "Launch at Login"
-        case .requiresApproval: loginItem.state = .mixed; loginItem.title = "Launch at Login (approve in Settings)"
-        default:                loginItem.state = .off;   loginItem.title = "Launch at Login"
+    @objc private func togglePopover() {
+        guard let button = statusItem.button else { return }
+        if popover.isShown {
+            closePopover()
+        } else {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
         }
     }
 
-    @objc private func toggleLaunchAtLogin() {
-        let service = SMAppService.mainApp
+    private func closePopover() { popover.performClose(nil) }
+
+    private func updateIcon() {
+        let status = AppStatus.shared
+        statusItem.button?.image = StatusIcon.image(attention: !status.isWorking,
+                                                    dimmed: status.isWorking && !status.gesturesOn)
+    }
+
+    private func observe(_ status: AppStatus) {
+        // objectWillChange fires before the new value lands; read it a beat later.
+        status.objectWillChange
+            .sink { [weak self] in DispatchQueue.main.async { self?.updateIcon() } }
+            .store(in: &subscriptions)
+
+        // The event tap and multitouch access are only set up at launch, so a
+        // permission granted while running needs a fresh process to take effect.
+        let baseline = (ax: status.accessibility, im: status.inputMonitoring)
+        status.$accessibility.combineLatest(status.$inputMonitoring)
+            .dropFirst()
+            .filter { ax, im in (ax && !baseline.ax) || (im && !baseline.im) }
+            .first()
+            .sink { [weak self] _ in self?.relaunch() }
+            .store(in: &subscriptions)
+    }
+
+    private func relaunch() {
+        NSLog("OnTouch: permission granted — relaunching to apply it")
+        let open = Process()
+        open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        open.arguments = ["-n", Bundle.main.bundlePath]
         do {
-            if service.status == .enabled {
-                try service.unregister()
-            } else {
-                try service.register()
-            }
+            try open.run()
+            NSApp.terminate(nil)
         } catch {
-            NSLog("OnTouch: launch-at-login change failed: \(error)")
+            NSLog("OnTouch: relaunch failed: \(error)")
         }
-        if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
-        refreshLoginItem()
     }
 
-    // MARK: Permissions
+    // MARK: Helpers
 
     private func promptForAccessibility() {
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -141,12 +107,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func openAccessibility() { openPane("Privacy_Accessibility") }
-    @objc private func openInputMonitoring() { openPane("Privacy_ListenEvent") }
-
-    private func openPane(_ anchor: String) {
+    static func openPane(_ anchor: String) {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    /// Until the Settings window exists, "Settings…" opens the config file.
+    static func showConfigFile() {
+        let url = URL(fileURLWithPath: ConfigStore.path)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try? "{\n}\n".write(to: url, atomically: true, encoding: .utf8)
+        }
+        NSWorkspace.shared.open(url)
     }
 }

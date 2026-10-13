@@ -51,6 +51,39 @@ enum Keys {
         "1":18,"2":19,"3":20,"4":21,"6":22,"5":23,"9":25,"7":26,"8":28,"0":29,
     ]
 
+    /// What the UI calls each built-in action.
+    static let titles: [String: String] = [
+        "nextTab": "Next tab", "prevTab": "Previous tab", "closeTab": "Close tab",
+        "newTab": "New tab", "reopenTab": "Reopen tab", "closeWindow": "Close window",
+        "reload": "Reload", "back": "Back", "forward": "Forward",
+        "newWindow": "New window", "privateWindow": "Private window",
+        "showAllTabs": "Show all tabs", "zoomIn": "Zoom in", "zoomOut": "Zoom out",
+        "firstTab": "First tab",
+    ]
+
+    /// "Next tab" for a built-in, "⌘L" for a custom chord, "Off" for none.
+    static func title(for action: String) -> String {
+        if action == none { return "Off" }
+        return titles[action] ?? symbols(for: action)
+    }
+
+    /// The chord as macOS shows shortcuts, e.g. "⌃⇧⇥" or "⇧⌘T".
+    static func symbols(for action: String) -> String {
+        if action == none { return "" }
+        let parts = (builtins[action] ?? action).lowercased().split(separator: "+").map(String.init)
+        guard let key = parts.last else { return action }
+        let mods = Set(parts.dropLast())
+        var out = ""
+        if mods.contains("ctrl") || mods.contains("control") { out += "⌃" }
+        if mods.contains("alt") || mods.contains("opt") || mods.contains("option") { out += "⌥" }
+        if mods.contains("shift") { out += "⇧" }
+        if mods.contains("cmd") || mods.contains("command") { out += "⌘" }
+        let keySymbols = ["tab": "⇥", "space": "Space", "return": "↩", "enter": "↩", "delete": "⌫",
+                          "escape": "⎋", "esc": "⎋", "left": "←", "right": "→", "up": "↑", "down": "↓",
+                          "backslash": "\\"]
+        return out + (keySymbols[key] ?? key.uppercased())
+    }
+
     /// The action that switches a gesture off (e.g. in one app).
     static let none = "none"
 
