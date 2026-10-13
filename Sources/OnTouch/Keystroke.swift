@@ -51,6 +51,34 @@ enum Keys {
         "1":18,"2":19,"3":20,"4":21,"6":22,"5":23,"9":25,"7":26,"8":28,"0":29,
     ]
 
+    /// The action that switches a gesture off (e.g. in one app).
+    static let none = "none"
+
+    /// The built-in name closest to a misspelled action, if any is close.
+    static func suggestion(for action: String) -> String? {
+        let a = action.lowercased()
+        let scored = builtins.keys.map { ($0, editDistance(a, $0.lowercased())) }
+        guard let best = scored.min(by: { $0.1 < $1.1 }), best.1 <= 2 else { return nil }
+        return best.0
+    }
+
+    private static func editDistance(_ a: String, _ b: String) -> Int {
+        let a = Array(a), b = Array(b)
+        guard !a.isEmpty else { return b.count }
+        guard !b.isEmpty else { return a.count }
+        var row = Array(0...b.count)
+        for i in 1...a.count {
+            var diag = row[0]
+            row[0] = i
+            for j in 1...b.count {
+                let up = row[j]
+                row[j] = min(up + 1, row[j - 1] + 1, diag + (a[i - 1] == b[j - 1] ? 0 : 1))
+                diag = up
+            }
+        }
+        return row[b.count]
+    }
+
     /// Parse "cmd+shift+t" (or a built-in name) into a Keystroke.
     static func parse(_ action: String) -> Keystroke? {
         let chord = builtins[action] ?? action

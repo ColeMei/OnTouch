@@ -66,8 +66,11 @@ Every binding is editable — see [Custom gestures](#custom-gestures).
 ## Custom gestures
 
 Copy [`config.example.json`](config.example.json) to
-`~/.config/trackpad-tabs/config.json` and edit it (no rebuild needed — restart
-the app to reload). Each binding looks like:
+`~/.config/ontouch/config.json` and edit it. Changes apply as soon as you save.
+If the file has a problem (bad JSON, a misspelled action), OnTouch keeps using
+the last working settings and logs what's wrong, with the line number. A config
+at upstream's old path, `~/.config/trackpad-tabs/config.json`, is copied over on
+first launch. Each binding looks like:
 
 ```json
 { "anchor": true, "fingers": 2, "type": "swipe", "direction": "up", "action": "newTab" }
@@ -79,8 +82,19 @@ the app to reload). Each binding looks like:
 | `fingers` | number of *acting* fingers (anchor not counted): `1`, `2`, `3` |
 | `type` | `"tap"` or `"swipe"` |
 | `direction` | tap → position vs. the anchor: `left`/`right`/`up`/`down`/`any`<br>swipe → `left`/`right`/`up`/`down` |
-| `action` | a built-in name **or** any key chord like `"cmd+shift+t"` |
-| `apps` | *(optional)* bundle IDs this binding applies to; defaults to `targetBundleIDs` |
+| `action` | a built-in name, any key chord like `"cmd+shift+t"`, or `"none"` |
+| `apps` | *(optional)* bundle IDs this binding is specific to |
+
+**Per-app gestures.** Gestures only act in apps listed in `targetBundleIDs`.
+A binding without `apps` is the default for all of them; one with `apps` wins
+over the default for the same gesture in those apps. E.g. Ghostty can't reopen
+closed tabs, so give it its own two-finger tap:
+
+```json
+{ "fingers": 2, "type": "tap", "direction": "any", "action": "newTab", "apps": ["com.mitchellh.ghostty"] }
+```
+
+Use `"action": "none"` to switch a gesture off in specific apps.
 
 **Built-in actions:** `nextTab`, `prevTab`, `closeTab`, `newTab`, `reopenTab`,
 `closeWindow`, `reload`, `back`, `forward`, `newWindow`, `privateWindow`,
@@ -94,8 +108,9 @@ in *any* app — e.g. `{"...": "...", "action": "cmd+l"}` to focus the address b
 ./install.sh      # build, sign, copy to /Applications, (re)launch
 ```
 
-Without an admin account it installs to `~/Applications` instead (override
-with `INSTALL_DIR=…`). `./build.sh` alone assembles the app in `.build/app.noindex/OnTouch.app`; `./run.sh` runs that
+Creating it in `/Applications` needs admin rights once; after that, updates
+work without them. With no admin rights at all it installs to `~/Applications`
+(override with `INSTALL_DIR=…`). `./build.sh` alone assembles the app in `.build/app.noindex/OnTouch.app`; `./run.sh` runs that
 copy in the foreground to watch logs. Set up [signing](#signing) first, or
 every rebuild needs its permissions re-granted. The app lives in the menu
 bar (hand icon + "OnTouch" label); there is no Dock icon.
@@ -169,12 +184,12 @@ The menu has shortcuts to open both panes. Add `OnTouch.app` and toggle it on.
 ## Tuning
 
 Recognition thresholds live in `Sources/OnTouch/Config.swift`. To change them
-without rebuilding, create `~/.config/trackpad-tabs/config.json` with any subset
-of keys, e.g.:
+without rebuilding, put any subset of keys in `~/.config/ontouch/config.json`,
+e.g.:
 
 ```json
 {
-  "swipeDownDist": 0.08,
+  "swipeDist": 0.08,
   "tapMaxDuration": 0.40,
   "targetBundleIDs": ["com.apple.Safari", "com.google.Chrome"]
 }
@@ -185,11 +200,15 @@ Distances are normalized trackpad units (0–1); times are in seconds.
 ## How it works
 
 - `CMultitouch` — C shim declaring the private MT API and linking the framework.
-- `MultitouchReader` — opens every MT device and streams frames via a C callback.
+- `MultitouchReader` — opens every MT device and streams frames via a C callback;
+  reopens them when a trackpad connects or disconnects and after wake.
 - `GestureEngine` — tracks finger contacts, identifies a held *anchor* finger,
   and recognizes taps (left/right of the anchor) and two-finger down-swipes.
-- `ActionRunner` — posts the mapped keyboard shortcut, but only when the window
-  under the cursor belongs to a target app.
+- `ActionRunner` — posts the mapped keyboard shortcut and finds the app whose
+  window is under the cursor (GestureEngine picks the binding for that app).
+- `ConfigStore` — loads, validates and live-reloads the config file.
+- `AppStatus` — permission, trackpad, last-gesture and config-problem state for
+  the UI.
 - `TypingMonitor` / `ScrollMonitor` — pause gestures while you type or scroll.
 - `ClickSuppressor` — event tap that drops the click a gesture-tap would cause.
 - `AppDelegate` — menu-bar UI, enable/disable and launch-at-login toggles,

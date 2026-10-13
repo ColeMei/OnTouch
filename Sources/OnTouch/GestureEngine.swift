@@ -29,7 +29,9 @@ final class GestureEngine {
 
     var enabled = true
 
-    private let cfg = Config.shared
+    /// Snapshot of ConfigStore.current, refreshed every frame so config edits
+    /// apply without a restart.
+    private var cfg = Config()
     private let actions = ActionRunner()
 
     private struct Touch {
@@ -55,9 +57,17 @@ final class GestureEngine {
     private var cooldownUntil: Double = 0
     private var armed = true     // re-armed once acting fingers clear
 
+    /// Forget all touches, e.g. when the devices are reopened.
+    func reset() {
+        tracked.removeAll()
+        episode = nil
+        Self.liveFingerCount = 0
+    }
+
     func handleFrame(data: UnsafeMutablePointer<Finger>?, count: Int, timestamp now: Double) {
-        guard enabled else { tracked.removeAll(); episode = nil; Self.liveFingerCount = 0; return }
+        guard enabled else { reset(); return }
         guard let data = data else { return }
+        cfg = ConfigStore.shared.current
 
         // 1. Ingest current contacts.
         var currentIDs = Set<Int32>()
@@ -156,8 +166,7 @@ final class GestureEngine {
         // 6a. Swipe — fires mid-gesture, while the acting fingers are still down.
         if canFireSwipe, var ep = episode, !ep.fired, !acting.isEmpty,
            let dir = swipeDirection(acting) {
-            if let m = match(anchor: anchorPresent, fingers: acting.count, type: "swipe", direction: dir) {
-                fire(m, now)
+            if trigger(anchor: anchorPresent, fingers: acting.count, type: "swipe", direction: dir, now) {
                 ep.fired = true
                 episode = ep
             }
@@ -168,9 +177,7 @@ final class GestureEngine {
             if canFireTap, !ep.fired,
                (now - ep.start) <= cfg.tapMaxDuration, ep.maxDisp <= cfg.tapMaxMove {
                 let dir = tapDirection(ep.centroid, anchor: anchorLeads ? anchor : nil)
-                if let m = match(anchor: anchorLeads, fingers: ep.peak, type: "tap", direction: dir) {
-                    fire(m, now)
-                }
+                trigger(anchor: anchorLeads, fingers: ep.peak, type: "tap", direction: dir, now)
             }
             episode = nil
         }
@@ -219,17 +226,38 @@ final class GestureEngine {
 
     // MARK: - Matching & firing
 
-    private func match(anchor: Bool, fingers: Int, type: String, direction: String) -> Mapping? {
-        cfg.mappings.first {
+    /// Runs the binding for this gesture in the app under the cursor: an
+    /// app-specific binding wins over the default one, and nothing runs outside
+    /// `targetBundleIDs`. Returns true if the gesture is bound at all, even if
+    /// nothing ran here — so a swipe isn't re-evaluated every frame.
+    @discardableResult
+    private func trigger(anchor: Bool, fingers: Int, type: String, direction: String, _ now: Double) -> Bool {
+        let bound = cfg.mappings.filter {
             $0.anchor == anchor && $0.fingers == fingers && $0.type == type &&
             ($0.direction == direction || $0.direction == "any")
         }
-    }
+        guard !bound.isEmpty else { return false }
 
-    private func fire(_ m: Mapping, _ now: Double) {
-        NSLog("OnTouch: \(m.fingers)-finger \(m.type) \(m.direction) → \(m.action)")
-        actions.perform(action: m.action, apps: m.apps ?? cfg.targetBundleIDs)
+        let gesture = "\(fingers)-finger \(type) \(direction)"
+        let app = ActionRunner.appUnderCursor()
+        let everyApp = cfg.targetBundleIDs.isEmpty || cfg.targetBundleIDs.contains("*")
+        guard everyApp || app.map(cfg.targetBundleIDs.contains) == true else {
+            NSLog("OnTouch: skipped \(gesture) — \(app ?? "unknown app") isn't a target")
+            return true
+        }
+        let specific = app.flatMap { app in bound.first { $0.apps?.contains(app) == true } }
+        guard let m = specific ?? bound.first(where: { $0.apps == nil }) else {
+            NSLog("OnTouch: skipped \(gesture) — not bound in \(app ?? "unknown app")")
+            return true
+        }
+
+        NSLog("OnTouch: \(gesture) → \(m.action) in \(app ?? "unknown app")")
+        actions.perform(action: m.action)
         cooldownUntil = now + cfg.cooldown
         armed = false
+        if m.action != Keys.none {
+            DispatchQueue.main.async { AppStatus.shared.recordGesture(action: m.action, app: app) }
+        }
+        return true
     }
 }

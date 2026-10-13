@@ -5,9 +5,16 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# /Applications needs an admin account; fall back to the per-user folder.
-if [ -w /Applications ]; then APPS="/Applications"; else APPS="$HOME/Applications"; fi
-DEST="${INSTALL_DIR:-$APPS}/OnTouch.app"
+# Creating an app in /Applications needs admin rights, but updating one you
+# already own doesn't — so prefer an existing copy, then /Applications, then the
+# per-user folder.
+if [ -n "${INSTALL_DIR:-}" ]; then
+    DEST="$INSTALL_DIR/OnTouch.app"
+elif [ -w /Applications/OnTouch.app ] || [ -w /Applications ]; then
+    DEST="/Applications/OnTouch.app"
+else
+    DEST="$HOME/Applications/OnTouch.app"
+fi
 mkdir -p "$(dirname "$DEST")"
 
 ./build.sh

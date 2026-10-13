@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy this to ~/.config/trackpad-tabs/config.json and edit. Any key you omit keeps its built-in default. All distances are normalized trackpad units (0-1); times are seconds.",
+  "_comment": "Copy this to ~/.config/ontouch/config.json and edit; changes apply on save. Any key you omit keeps its built-in default. All distances are normalized trackpad units (0-1); times are seconds.",
 
   "_targetBundleIDs_note": "Apps where gestures act. Use [\"*\"] for every app (riskier — can fire shortcuts into text). Default is browsers + Finder.",
   "targetBundleIDs": [
@@ -9,7 +9,8 @@
     "com.brave.Browser",
     "com.microsoft.edgemac",
     "org.mozilla.firefox",
-    "com.apple.finder"
+    "com.apple.finder",
+    "com.mitchellh.ghostty"
   ],
 
   "_mappings_note": "Single-finger swipes collide with two-finger scrolling, so the defaults focus on switching + closing tabs. Add more bindings (back/forward/reload/newTab) here if you want them.",
@@ -22,8 +23,12 @@
     { "_example_custom_keystroke": "any chord works as an action",
       "anchor": true, "fingers": 3, "type": "tap", "direction": "any", "action": "cmd+shift+t" },
 
-    { "_example_per_app": "scope a binding to specific apps with 'apps'",
-      "anchor": true, "fingers": 1, "type": "swipe", "direction": "down",
-      "action": "cmd+l", "apps": ["com.apple.Safari", "com.google.Chrome"] }
+    { "_example_per_app": "an 'apps' binding wins over the default for the same gesture in those apps",
+      "anchor": true, "fingers": 2, "type": "tap", "direction": "any",
+      "action": "newTab", "apps": ["com.mitchellh.ghostty"] },
+
+    { "_example_off": "\"none\" switches a gesture off in specific apps",
+      "anchor": true, "fingers": 1, "type": "tap", "direction": "left",
+      "action": "none", "apps": ["com.apple.finder"] }
   ]
 }

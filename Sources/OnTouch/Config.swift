@@ -10,9 +10,11 @@ import Foundation
 ///   direction: tap   → "left" | "right" | "up" | "down" | "any"
 ///                       (position of the tap relative to the anchor)
 ///              swipe → "left" | "right" | "up" | "down"
-///   action:    a built-in name (see Keys.builtins) or a chord like "cmd+shift+t"
-///   apps:      optional bundle IDs to restrict this binding to; nil = use the
-///              global targetBundleIDs
+///   action:    a built-in name (see Keys.builtins), a chord like "cmd+shift+t",
+///              or "none" to switch the gesture off
+///   apps:      optional bundle IDs this binding is specific to; nil = the
+///              default for every app in targetBundleIDs. An app-specific
+///              binding wins over the default for the same gesture.
 struct Mapping: Codable {
     var anchor: Bool = true
     var fingers: Int = 1
@@ -40,7 +42,7 @@ struct Mapping: Codable {
 }
 
 /// Tunable thresholds + gesture bindings. Override any subset by writing
-/// ~/.config/trackpad-tabs/config.json.
+/// ~/.config/ontouch/config.json (see ConfigStore).
 struct Config: Codable {
     var anchorMinHold: Double = 0.05
     // The anchor must stay within this fraction of the trackpad to count as
@@ -72,7 +74,8 @@ struct Config: Codable {
     // Pause gestures for this long after scrolling, so the touches between
     // scroll strokes aren't mistaken for tab-switch taps.
     var scrollGuard: Double = 0.4
-    // Apps where gestures act. Use ["*"] to act in every app (riskier — a stray
+    // Apps where gestures act — nothing fires anywhere else, app-specific
+    // bindings included. Use ["*"] to act in every app (riskier — a stray
     // gesture can fire shortcuts into text fields). Default: browsers + Finder,
     // which all share the same shortcuts (Cmd-W close, Ctrl-Tab next, Cmd-T new,
     // Cmd-[/] back) and aren't text editors.
@@ -118,17 +121,5 @@ struct Config: Codable {
         d.targetBundleIDs = try c.decodeIfPresent([String].self, forKey: .targetBundleIDs) ?? d.targetBundleIDs
         d.mappings        = try c.decodeIfPresent([Mapping].self, forKey: .mappings)     ?? d.mappings
         self = d
-    }
-
-    static let shared: Config = load()
-
-    private static func load() -> Config {
-        let path = ("~/.config/trackpad-tabs/config.json" as NSString).expandingTildeInPath
-        guard let data = FileManager.default.contents(atPath: path),
-              let cfg = try? JSONDecoder().decode(Config.self, from: data) else {
-            return Config()
-        }
-        NSLog("OnTouch: loaded config from \(path) (\(cfg.mappings.count) mappings)")
-        return cfg
     }
 }

@@ -1,22 +1,11 @@
 import AppKit
 import CoreGraphics
 
-/// Posts the keystroke for an action, but only when one of the allowed apps is
-/// frontmost — so gestures never hijack input from unrelated windows.
+/// Posts the keystroke for an action. Which binding applies (and whether the
+/// app under the cursor is a target at all) is decided by GestureEngine.
 final class ActionRunner {
-    func perform(action: String, apps: [String]) {
-        // "*" (or an empty list) means "every app". Otherwise the window directly
-        // under the cursor must belong to one of the allowed apps — so gestures
-        // only act while you're actually pointing at (e.g.) a browser window,
-        // not a menu, the Dock, or another app.
-        let anyApp = apps.isEmpty || apps.contains("*")
-        if !anyApp {
-            let owner = appUnderCursor()
-            guard let owner, apps.contains(owner) else {
-                NSLog("OnTouch: skipped '\(action)' — app under cursor is \(owner ?? "unknown")")
-                return
-            }
-        }
+    func perform(action: String) {
+        guard action != Keys.none else { return }
         guard let ks = Keys.parse(action) else {
             NSLog("OnTouch: unknown action '\(action)'")
             return
@@ -26,7 +15,7 @@ final class ActionRunner {
 
     /// Bundle identifier of the app owning the front-most window under the
     /// cursor, or nil if it can't be determined.
-    private func appUnderCursor() -> String? {
+    static func appUnderCursor() -> String? {
         let mouse = NSEvent.mouseLocation   // Cocoa coords: origin bottom-left of primary screen
         guard let primary = NSScreen.screens.first(where: { $0.frame.origin == .zero }) else { return nil }
         // Convert to Quartz coords (origin top-left) used by CGWindowList.

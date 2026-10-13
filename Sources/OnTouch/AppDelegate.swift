@@ -12,8 +12,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var loginItem: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        ConfigStore.shared.onChange = { AppStatus.shared.setConfigIssues(ConfigStore.shared.issues) }
+        ConfigStore.shared.start()
+        reader.onChange = { AppStatus.shared.setTrackpads($0) }
+
         setupMenu()
         promptForAccessibility()
+        AppStatus.shared.start()
         typingMonitor.start()
         scrollMonitor.start()
         clickSuppressor.start()
@@ -41,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         for line in ["Hold a finger, tap left/right = prev/next tab",
                      "Hold a finger, 2-finger swipe down = close tab",
-                     "Customize: ~/.config/trackpad-tabs/config.json"] {
+                     "Customize: ~/.config/ontouch/config.json"] {
             let item = NSMenuItem(title: line, action: nil, keyEquivalent: "")
             item.isEnabled = false
             menu.addItem(item)
