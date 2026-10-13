@@ -11,7 +11,11 @@ final class ActionRunner {
         // not a menu, the Dock, or another app.
         let anyApp = apps.isEmpty || apps.contains("*")
         if !anyApp {
-            guard let owner = appUnderCursor(), apps.contains(owner) else { return }
+            let owner = appUnderCursor()
+            guard let owner, apps.contains(owner) else {
+                NSLog("OnTouch: skipped '\(action)' — app under cursor is \(owner ?? "unknown")")
+                return
+            }
         }
         guard let ks = Keys.parse(action) else {
             NSLog("OnTouch: unknown action '\(action)'")
@@ -33,8 +37,12 @@ final class ActionRunner {
         else { return nil }
 
         // Windows are ordered front-to-back; the first one containing the point
-        // is what's visually under the cursor.
+        // is what's visually under the cursor. Skip the cursor itself: recent
+        // macOS lists it as a tiny Window Server window at cursor level, which
+        // would otherwise always be "under the cursor" and block every gesture.
+        let cursorLevel = Int(CGWindowLevelForKey(.cursorWindow))
         for w in windows {
+            if let layer = w[kCGWindowLayer as String] as? Int, layer >= cursorLevel { continue }
             guard let b = w[kCGWindowBounds as String] as? [String: Any],
                   let bounds = CGRect(dictionaryRepresentation: b as CFDictionary),
                   bounds.contains(point) else { continue }
