@@ -20,7 +20,7 @@ fi
 
 echo "==> installing to $DEST"
 # ditto updates the bundle in place, so its path (and Login Item) stays put.
-ditto OnTouch.app "$DEST"
+ditto .build/app.noindex/OnTouch.app "$DEST"
 
 echo "==> launching"
 open "$DEST"

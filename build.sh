@@ -10,7 +10,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 CONFIG=release
-APP="OnTouch.app"
+# Staged under a .noindex dir so Spotlight / Open dialogs only show the
+# installed copy.
+APP=".build/app.noindex/OnTouch.app"
 BUNDLE_ID="dev.colemei.ontouch"
 SIGN_IDENTITY="${SIGN_IDENTITY:-OnTouch Local Signing}"
 

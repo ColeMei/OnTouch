@@ -4,5 +4,5 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-[ -d "OnTouch.app" ] || ./build.sh
-exec ./OnTouch.app/Contents/MacOS/OnTouch
+[ -d ".build/app.noindex/OnTouch.app" ] || ./build.sh
+exec ./.build/app.noindex/OnTouch.app/Contents/MacOS/OnTouch

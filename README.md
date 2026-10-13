@@ -95,7 +95,7 @@ in *any* app — e.g. `{"...": "...", "action": "cmd+l"}` to focus the address b
 ```
 
 Without an admin account it installs to `~/Applications` instead (override
-with `INSTALL_DIR=…`). `./build.sh` alone assembles `OnTouch.app` in the repo; `./run.sh` runs that
+with `INSTALL_DIR=…`). `./build.sh` alone assembles the app in `.build/app.noindex/OnTouch.app`; `./run.sh` runs that
 copy in the foreground to watch logs. Set up [signing](#signing) first, or
 every rebuild needs its permissions re-granted. The app lives in the menu
 bar (hand icon + "OnTouch" label); there is no Dock icon.
@@ -140,7 +140,7 @@ security import id.p12 -k ~/Library/Keychains/login.keychain-db -P "$P" -T /usr/
 
 Then delete the temporary key files. `security find-identity -p codesigning`
 lists it as `CSSMERR_TP_NOT_TRUSTED` — that's expected and doesn't matter for
-local signing. Check a build with `codesign -dr - OnTouch.app`: the designated
+local signing. Check a build with `codesign -dr - .build/app.noindex/OnTouch.app`: the designated
 requirement should name `certificate leaf`, not `cdhash`.
 
 ## Launch at login
