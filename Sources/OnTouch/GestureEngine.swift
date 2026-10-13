@@ -268,16 +268,16 @@ final class GestureEngine {
         let app = ActionRunner.appUnderCursor()
         let everyApp = cfg.targetBundleIDs.isEmpty || cfg.targetBundleIDs.contains("*")
         guard everyApp || app.map(cfg.targetBundleIDs.contains) == true else {
-            NSLog("OnTouch: skipped \(gesture) — \(app ?? "unknown app") isn't a target")
+            Log.write("skipped \(gesture) — \(app ?? "unknown app") isn't a target")
             return true
         }
         let specific = app.flatMap { app in bound.first { $0.apps?.contains(app) == true } }
         guard let m = specific ?? bound.first(where: { $0.apps == nil }) else {
-            NSLog("OnTouch: skipped \(gesture) — not bound in \(app ?? "unknown app")")
+            Log.write("skipped \(gesture) — not bound in \(app ?? "unknown app")")
             return true
         }
 
-        NSLog("OnTouch: \(gesture) → \(m.action) in \(app ?? "unknown app")")
+        Log.write("\(gesture) → \(m.action) in \(app ?? "unknown app")")
         actions.perform(action: m.action)
         cooldownUntil = now + cfg.cooldown
         armed = false

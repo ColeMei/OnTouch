@@ -18,7 +18,7 @@ enum LoginItem {
         do {
             if on { try service.register() } else { try service.unregister() }
         } catch {
-            NSLog("OnTouch: launch-at-login change failed: \(error)")
+            Log.write("launch-at-login change failed: \(error)")
         }
         if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
     }

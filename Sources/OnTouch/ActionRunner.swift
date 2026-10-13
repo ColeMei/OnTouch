@@ -7,7 +7,7 @@ final class ActionRunner {
     func perform(action: String) {
         guard action != Keys.none else { return }
         guard let ks = Keys.parse(action) else {
-            NSLog("OnTouch: unknown action '\(action)'")
+            Log.write("unknown action '\(action)'")
             return
         }
         post(ks)
@@ -29,16 +29,31 @@ final class ActionRunner {
         // is what's visually under the cursor. Skip the cursor itself: recent
         // macOS lists it as a tiny Window Server window at cursor level, which
         // would otherwise always be "under the cursor" and block every gesture.
+        //
+        // Also skip screen-sized windows above normal level: overlays such as
+        // the transparent one Notification Center puts over the whole screen
+        // while a banner shows, which would otherwise block every gesture.
         let cursorLevel = Int(CGWindowLevelForKey(.cursorWindow))
+        let screens = NSScreen.screens.map {
+            CGRect(x: $0.frame.minX, y: primary.frame.height - $0.frame.maxY,
+                   width: $0.frame.width, height: $0.frame.height)
+        }
         for w in windows {
-            if let layer = w[kCGWindowLayer as String] as? Int, layer >= cursorLevel { continue }
+            let layer = w[kCGWindowLayer as String] as? Int ?? 0
+            if layer >= cursorLevel { continue }
             guard let b = w[kCGWindowBounds as String] as? [String: Any],
                   let bounds = CGRect(dictionaryRepresentation: b as CFDictionary),
                   bounds.contains(point) else { continue }
+            if layer > 0, screens.contains(where: { Self.sameRect($0, bounds) }) { continue }
             guard let pid = w[kCGWindowOwnerPID as String] as? pid_t else { return nil }
             return NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
         }
         return nil
+    }
+
+    private static func sameRect(_ a: CGRect, _ b: CGRect) -> Bool {
+        abs(a.minX - b.minX) <= 1 && abs(a.minY - b.minY) <= 1
+            && abs(a.width - b.width) <= 1 && abs(a.height - b.height) <= 1
     }
 
     private func post(_ ks: Keystroke) {

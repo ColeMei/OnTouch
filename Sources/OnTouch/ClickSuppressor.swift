@@ -44,13 +44,13 @@ final class ClickSuppressor {
                                           eventsOfInterest: CGEventMask(mask),
                                           callback: clickTapCallback,
                                           userInfo: nil) else {
-            NSLog("OnTouch: could not create click event tap (needs Accessibility)")
+            Log.write("could not create click event tap (needs Accessibility)")
             return
         }
         self.tap = tap
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        NSLog("OnTouch: click suppressor active")
+        Log.write("click suppressor active")
     }
 }

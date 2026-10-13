@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let scrollMonitor = ScrollMonitor()
     private let clickSuppressor = ClickSuppressor()
     private var subscriptions = Set<AnyCancellable>()
+    private lazy var settings = SettingsWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let status = AppStatus.shared
@@ -25,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scrollMonitor.start()
         clickSuppressor.start()
         if !reader.start() {
-            NSLog("OnTouch: no multitouch device — check Input Monitoring permission")
+            Log.write("no multitouch device — check Input Monitoring permission")
         }
         observe(status)
     }
@@ -39,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateIcon()
 
         let actions = PopoverActions(
-            openSettings: { [weak self] in self?.closePopover(); Self.showConfigFile() },
+            openSettings: { [weak self] in self?.closePopover(); self?.settings.show() },
             openPrivacyPane: { [weak self] pane in self?.closePopover(); Self.openPane(pane) },
             showConfigFile: { [weak self] in self?.closePopover(); Self.showConfigFile() },
             quit: { NSApp.terminate(nil) }
@@ -86,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func relaunch() {
-        NSLog("OnTouch: permission granted — relaunching to apply it")
+        Log.write("permission granted — relaunching to apply it")
         let open = Process()
         open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         open.arguments = ["-n", Bundle.main.bundlePath]
@@ -94,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try open.run()
             NSApp.terminate(nil)
         } catch {
-            NSLog("OnTouch: relaunch failed: \(error)")
+            Log.write("relaunch failed: \(error)")
         }
     }
 
@@ -103,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func promptForAccessibility() {
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         if !AXIsProcessTrustedWithOptions(opts) {
-            NSLog("OnTouch: Accessibility permission not yet granted")
+            Log.write("Accessibility permission not yet granted")
         }
     }
 
@@ -113,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Until the Settings window exists, "Settings…" opens the config file.
+    /// Opens the config file in the user's editor (creating an empty one).
     static func showConfigFile() {
         let url = URL(fileURLWithPath: ConfigStore.path)
         if !FileManager.default.fileExists(atPath: url.path) {

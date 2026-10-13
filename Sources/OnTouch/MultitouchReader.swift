@@ -51,7 +51,7 @@ final class MultitouchReader {
         seenLock.lock()
         let isNew = seen.insert(device).inserted
         seenLock.unlock()
-        if isNew { NSLog("OnTouch: receiving touches from device \(device) (device clock \(Int(time)) s)") }
+        if isNew { Log.write("receiving touches from device \(device) (device clock \(Int(time)) s)") }
     }
 
     private static func resetSeen() {
@@ -105,7 +105,7 @@ final class MultitouchReader {
 
     private func openDevices() {
         guard let list = MTDeviceCreateList()?.takeRetainedValue() else {
-            NSLog("OnTouch: MTDeviceCreateList returned nil")
+            Log.write("MTDeviceCreateList returned nil")
             onChange?(0)
             return
         }
@@ -117,9 +117,9 @@ final class MultitouchReader {
             MTRegisterContactFrameCallback(device, mtFrameCallback)
             MTDeviceStart(device, 0)
             devices.append(device)
-            NSLog("OnTouch: opened device \(device) (running: \(MTDeviceIsRunning(device)))")
+            Log.write("opened device \(device) (running: \(MTDeviceIsRunning(device)))")
         }
-        NSLog("OnTouch: started \(devices.count) multitouch device(s)")
+        Log.write("started \(devices.count) multitouch device(s)")
         onChange?(devices.count)
     }
 
@@ -133,7 +133,7 @@ final class MultitouchReader {
             let kr = IOServiceAddMatchingNotification(port, type, IOServiceMatching("AppleMultitouchDevice"),
                                                       deviceChangedCallback, refcon, &iterator)
             guard kr == KERN_SUCCESS else {
-                NSLog("OnTouch: can't watch for trackpad changes (\(kr))")
+                Log.write("can't watch for trackpad changes (\(kr))")
                 continue
             }
             // Drain once to arm the notification; existing devices are already open.

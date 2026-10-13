@@ -63,8 +63,40 @@ final class ConfigStore {
             report(problems)
             return
         }
-        NSLog("OnTouch: config loaded from \(Self.path) (\(cfg.mappings.count) gestures)")
+        Log.write("config loaded from \(Self.path) (\(cfg.mappings.count) gestures)")
         apply(cfg, issues: [])
+    }
+
+    // MARK: Saving
+
+    /// Writes settings changed in the UI back to the file, keeping every other
+    /// key (including the user's notes) as it is. A nil value removes the key,
+    /// restoring its default. Refuses while the file isn't valid JSON, so a hand
+    /// edit in progress is never overwritten.
+    @discardableResult
+    func update(_ changes: [String: Any?]) -> Bool {
+        var object: [String: Any] = [:]
+        if let data = FileManager.default.contents(atPath: Self.path),
+           !data.allSatisfy({ $0 == 0x20 || $0 == 0x0A || $0 == 0x0D || $0 == 0x09 }) {
+            guard let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+                Log.write("not saving settings — config.json isn't valid JSON right now")
+                return false
+            }
+            object = parsed
+        }
+        for (key, value) in changes {
+            if let value { object[key] = value } else { object.removeValue(forKey: key) }
+        }
+        do {
+            let data = try JSONSerialization.data(withJSONObject: object,
+                                                  options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+            try data.write(to: URL(fileURLWithPath: Self.path), options: .atomic)
+        } catch {
+            Log.write("couldn't save settings: \(error)")
+            return false
+        }
+        reload()
+        return true
     }
 
     private func apply(_ cfg: Config, issues: [String]) {
@@ -75,7 +107,7 @@ final class ConfigStore {
 
     /// Keep the last good config; just surface what's wrong.
     private func report(_ problems: [String]) {
-        for p in problems { NSLog("OnTouch: config problem — \(p)") }
+        for p in problems { Log.write("config problem — \(p)") }
         issues = problems
         onChange?()
     }
@@ -86,9 +118,9 @@ final class ConfigStore {
         guard !fm.fileExists(atPath: Self.path), fm.fileExists(atPath: Self.legacyPath) else { return }
         do {
             try fm.copyItem(atPath: Self.legacyPath, toPath: Self.path)
-            NSLog("OnTouch: copied config from \(Self.legacyPath) to \(Self.path)")
+            Log.write("copied config from \(Self.legacyPath) to \(Self.path)")
         } catch {
-            NSLog("OnTouch: could not copy legacy config: \(error)")
+            Log.write("could not copy legacy config: \(error)")
         }
     }
 
@@ -99,7 +131,7 @@ final class ConfigStore {
     private func watch() {
         let fd = open(Self.directory, O_EVTONLY)
         guard fd >= 0 else {
-            NSLog("OnTouch: can't watch \(Self.directory) for config changes")
+            Log.write("can't watch \(Self.directory) for config changes")
             return
         }
         let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)

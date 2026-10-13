@@ -43,11 +43,11 @@ final class AppStatus: ObservableObject {
         let im = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
         if ax != accessibility {
             accessibility = ax
-            NSLog("OnTouch: Accessibility \(ax ? "granted" : "not granted")")
+            Log.write("Accessibility \(ax ? "granted" : "not granted")")
         }
         if im != inputMonitoring {
             inputMonitoring = im
-            NSLog("OnTouch: Input Monitoring \(im ? "granted" : "not granted")")
+            Log.write("Input Monitoring \(im ? "granted" : "not granted")")
         }
     }
 
