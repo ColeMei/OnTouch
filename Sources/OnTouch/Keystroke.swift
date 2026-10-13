@@ -36,7 +36,7 @@ enum Keys {
     ]
 
     /// Named keys and symbols → virtual key codes (kVK_*).
-    private static let namedKeys: [String: CGKeyCode] = [
+    static let namedKeys: [String: CGKeyCode] = [
         "tab": 48, "space": 49, "return": 36, "enter": 36, "delete": 51,
         "escape": 53, "esc": 53,
         "left": 123, "right": 124, "down": 125, "up": 126,
@@ -44,7 +44,7 @@ enum Keys {
         "=": 24, "-": 27, ";": 41, "'": 39, ",": 43, ".": 47, "/": 44, "`": 50,
     ]
 
-    private static let letters: [Character: CGKeyCode] = [
+    static let letters: [Character: CGKeyCode] = [
         "a":0,"s":1,"d":2,"f":3,"h":4,"g":5,"z":6,"x":7,"c":8,"v":9,"b":11,
         "q":12,"w":13,"e":14,"r":15,"y":16,"t":17,"o":31,"u":32,"i":34,"p":35,
         "l":37,"j":38,"k":40,"n":45,"m":46,
@@ -60,6 +60,11 @@ enum Keys {
         "showAllTabs": "Show all tabs", "zoomIn": "Zoom in", "zoomOut": "Zoom out",
         "firstTab": "First tab",
     ]
+
+    /// Built-ins in the order the action menu lists them.
+    static let menuOrder = ["prevTab", "nextTab", "closeTab", "reopenTab", "newTab", "back", "forward",
+                            "reload", "closeWindow", "newWindow", "privateWindow", "showAllTabs",
+                            "zoomIn", "zoomOut", "firstTab"]
 
     /// "Next tab" for a built-in, "⌘L" for a custom chord, "Off" for none.
     static func title(for action: String) -> String {
@@ -82,6 +87,21 @@ enum Keys {
                           "escape": "⎋", "esc": "⎋", "left": "←", "right": "→", "up": "↑", "down": "↓",
                           "backslash": "\\"]
         return out + (keySymbols[key] ?? key.uppercased())
+    }
+
+    /// The chord string for a pressed key, e.g. "cmd+shift+k" — for recording
+    /// custom shortcuts. Nil for keys OnTouch can't post.
+    static func chord(keyCode: CGKeyCode, flags: CGEventFlags) -> String? {
+        // Several names share a key code; use the canonical one.
+        let aliases: Set<String> = ["enter", "esc", "\\"]
+        let named = namedKeys.first { $0.value == keyCode && !aliases.contains($0.key) }?.key
+        guard let key = named ?? letters.first(where: { $0.value == keyCode }).map({ String($0.key) }) else { return nil }
+        var parts: [String] = []
+        if flags.contains(.maskControl) { parts.append("ctrl") }
+        if flags.contains(.maskAlternate) { parts.append("alt") }
+        if flags.contains(.maskShift) { parts.append("shift") }
+        if flags.contains(.maskCommand) { parts.append("cmd") }
+        return (parts + [key]).joined(separator: "+")
     }
 
     /// The action that switches a gesture off (e.g. in one app).

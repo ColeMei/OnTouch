@@ -18,14 +18,18 @@ private func clickTapCallback(proxy: CGEventTapProxy, type: CGEventType,
     // Suppress clicks only while an actual gesture is in progress (anchor +
     // acting finger), not merely when 2+ fingers touch the pad — a thumb
     // resting on the edge plus a normal click must still click.
+    // And only over apps where gestures act — elsewhere (Settings included) a
+    // resting finger plus a click is just a click.
     let suppressor = ClickSuppressor.shared
-    if type == .leftMouseDown, GestureEngine.isGesturing(window: 0.25) {
+    if type == .leftMouseDown, GestureEngine.isGesturing(window: 0.25), ClickSuppressor.cursorOverTarget() {
         suppressor?.pendingSuppressUp = true
         return nil                      // drop the click
     }
-    if type == .leftMouseUp, GestureEngine.isGesturing(window: 0.25) || (suppressor?.pendingSuppressUp ?? false) {
+    // Drop a release only if its press was dropped: a release on its own
+    // would leave the app thinking the button is still held (a stuck drag).
+    if type == .leftMouseUp, suppressor?.pendingSuppressUp == true {
         suppressor?.pendingSuppressUp = false
-        return nil                      // drop the matching release
+        return nil
     }
     return Unmanaged.passUnretained(event)
 }
@@ -34,6 +38,15 @@ final class ClickSuppressor {
     static var shared: ClickSuppressor?
     var tap: CFMachPort?
     var pendingSuppressUp = false
+
+    /// True if the window under the cursor belongs to an app gestures act in.
+    static func cursorOverTarget() -> Bool {
+        let targets = ConfigStore.shared.current.targetBundleIDs
+        let app = ActionRunner.appUnderCursor()
+        if app == Bundle.main.bundleIdentifier { return false }
+        if targets.isEmpty || targets.contains("*") { return true }
+        return app.map(targets.contains) ?? false
+    }
 
     func start() {
         ClickSuppressor.shared = self

@@ -27,6 +27,7 @@ final class SettingsWindowController: NSWindowController {
         let host = NSHostingController(rootView: view)
         host.sizingOptions = []                 // keep the fixed size; don't track SwiftUI's
         host.preferredContentSize = contentSize
+        host.title = label                      // the window shows the selected tab's title
         let item = NSTabViewItem(viewController: host)
         item.label = label
         item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
@@ -37,47 +38,5 @@ final class SettingsWindowController: NSWindowController {
     func show() {
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
-    }
-}
-
-/// Settings → Gestures, read-only for now: the default set, then each app's
-/// own versions. Editing arrives with the sidebar layout.
-struct GesturesSettings: View {
-    @ObservedObject var status: AppStatus
-
-    var body: some View {
-        Form {
-            section("Default", status.config.mappings.filter { $0.apps == nil })
-            ForEach(appsWithOwnGestures, id: \.self) { app in
-                section(AppNames.name(app), status.config.mappings.filter { $0.apps?.contains(app) == true })
-            }
-        }
-        .formStyle(.grouped)
-        .frame(width: SettingsWindowController.contentSize.width,
-               height: SettingsWindowController.contentSize.height)
-    }
-
-    private var appsWithOwnGestures: [String] {
-        var seen: [String] = []
-        for m in status.config.mappings { for a in m.apps ?? [] where !seen.contains(a) { seen.append(a) } }
-        return seen
-    }
-
-    private func section(_ title: String, _ mappings: [Mapping]) -> some View {
-        Section(title) {
-            ForEach(Array(mappings.enumerated()), id: \.offset) { _, m in
-                HStack(spacing: 14) {
-                    GestureGlyph(m).frame(width: 44, height: 30)
-                    Text(GestureGlyph.describe(fingers: m.fingers, type: m.type, direction: m.direction))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 150, alignment: .leading)
-                    Text(Keys.title(for: m.action))
-                    Spacer()
-                    Text(Keys.symbols(for: m.action))
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
     }
 }

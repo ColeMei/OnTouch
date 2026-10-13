@@ -88,6 +88,9 @@ struct Config: Codable {
         "org.mozilla.firefox",
         "com.apple.finder",
     ]
+    // Apps switched off in Settings: kept in the list, but gestures don't act
+    // there (only targetBundleIDs counts).
+    var disabledBundleIDs: [String] = []
 
     /// Focused defaults: switching + closing tabs. Hold one finger as the
     /// anchor, then act with the other(s). Removed the single-finger swipes
@@ -119,6 +122,7 @@ struct Config: Codable {
         d.typingGuard     = try c.decodeIfPresent(Double.self, forKey: .typingGuard)     ?? d.typingGuard
         d.scrollGuard     = try c.decodeIfPresent(Double.self, forKey: .scrollGuard)     ?? d.scrollGuard
         d.targetBundleIDs = try c.decodeIfPresent([String].self, forKey: .targetBundleIDs) ?? d.targetBundleIDs
+        d.disabledBundleIDs = try c.decodeIfPresent([String].self, forKey: .disabledBundleIDs) ?? d.disabledBundleIDs
         d.mappings        = try c.decodeIfPresent([Mapping].self, forKey: .mappings)     ?? d.mappings
         self = d
     }
