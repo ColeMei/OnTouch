@@ -10,9 +10,11 @@ private func mtFrameCallback(_ device: MTDeviceRef?,
                             _ numTouches: Int32,
                             _ timestamp: Double,
                             _ frame: Int32) -> Int32 {
-    GestureEngine.shared.handleFrame(data: touches,
+    if let device, numTouches > 0 { MultitouchReader.noteFrame(from: device, time: timestamp) }
+    GestureEngine.shared.handleFrame(device: device,
+                                     data: touches,
                                      count: Int(numTouches),
-                                     timestamp: timestamp)
+                                     deviceTime: timestamp)
     return 0
 }
 
@@ -20,7 +22,7 @@ private func mtFrameCallback(_ device: MTDeviceRef?,
 private func deviceChangedCallback(_ refcon: UnsafeMutableRawPointer?, _ iterator: io_iterator_t) {
     MultitouchReader.drain(iterator)
     guard let refcon else { return }
-    Unmanaged<MultitouchReader>.fromOpaque(refcon).takeUnretainedValue().scheduleRestart()
+    Unmanaged<MultitouchReader>.fromOpaque(refcon).takeUnretainedValue().devicesChanged()
 }
 
 /// Opens every multitouch device and streams frames to the gesture engine.
@@ -39,6 +41,22 @@ final class MultitouchReader {
     var onChange: ((Int) -> Void)?
 
     var deviceCount: Int { devices.count }
+
+    // Which devices have delivered a frame since they were (re)opened — logged
+    // once per device, so a trackpad that opens but never streams is visible.
+    private static let seenLock = NSLock()
+    private static var seen = Set<UnsafeMutableRawPointer>()
+
+    static func noteFrame(from device: MTDeviceRef, time: Double) {
+        seenLock.lock()
+        let isNew = seen.insert(device).inserted
+        seenLock.unlock()
+        if isNew { NSLog("OnTouch: receiving touches from device \(device) (device clock \(Int(time)) s)") }
+    }
+
+    private static func resetSeen() {
+        seenLock.lock(); seen.removeAll(); seenLock.unlock()
+    }
 
     /// True if at least one multitouch device started streaming.
     @discardableResult
@@ -63,8 +81,14 @@ final class MultitouchReader {
         deviceList = nil
     }
 
-    /// Reopen all devices once things settle — a device that just appeared
-    /// isn't always ready to stream immediately.
+    /// A trackpad appeared or disappeared. A Bluetooth trackpad that just
+    /// connected may not stream if opened too early, so reopen once soon and
+    /// once more after it has settled.
+    func devicesChanged() {
+        scheduleRestart(after: 1)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.scheduleRestart(after: 0) }
+    }
+
     func scheduleRestart(after delay: Double = 1) {
         pendingRestart?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.restart() }
@@ -86,12 +110,14 @@ final class MultitouchReader {
             return
         }
         deviceList = list
+        Self.resetSeen()
         for i in 0..<CFArrayGetCount(list) {
             guard let raw = CFArrayGetValueAtIndex(list, i) else { continue }
             let device = MTDeviceRef(mutating: raw)
             MTRegisterContactFrameCallback(device, mtFrameCallback)
             MTDeviceStart(device, 0)
             devices.append(device)
+            NSLog("OnTouch: opened device \(device) (running: \(MTDeviceIsRunning(device)))")
         }
         NSLog("OnTouch: started \(devices.count) multitouch device(s)")
         onChange?(devices.count)

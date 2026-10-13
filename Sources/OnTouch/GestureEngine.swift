@@ -7,8 +7,10 @@ import CMultitouch
 /// plus one or more "acting" fingers that either tap (quick touch near the
 /// anchor) or swipe (travel in a direction).
 ///
-/// All frames arrive on one background thread (the MT callback), so the mutable
-/// state needs no locking.
+/// Each trackpad has its own recognition state: an idle trackpad keeps
+/// streaming empty frames, which with one shared state would read as the other
+/// trackpad's fingers lifting. Frames may arrive on several MT threads, so
+/// `handleFrame` is serialized with a lock.
 final class GestureEngine {
     static let shared = GestureEngine()
 
@@ -52,20 +54,44 @@ final class GestureEngine {
         var fired: Bool          // a swipe already fired this episode
     }
 
+    private struct DeviceState {
+        var tracked: [Int32: Touch] = [:]
+        var episode: Episode?
+        var armed = true
+    }
+    private var states: [UInt: DeviceState] = [:]
+    private let lock = NSLock()
+
+    // The state of the device whose frame is being processed.
     private var tracked: [Int32: Touch] = [:]
     private var episode: Episode?
-    private var cooldownUntil: Double = 0
     private var armed = true     // re-armed once acting fingers clear
+    private var cooldownUntil: Double = 0   // shared: one action per cooldown, any trackpad
 
     /// Forget all touches, e.g. when the devices are reopened.
     func reset() {
+        lock.lock(); defer { lock.unlock() }
+        states.removeAll()
+        cooldownUntil = 0
         tracked.removeAll()
         episode = nil
         Self.liveFingerCount = 0
     }
 
-    func handleFrame(data: UnsafeMutablePointer<Finger>?, count: Int, timestamp now: Double) {
-        guard enabled else { reset(); return }
+    func handleFrame(device: MTDeviceRef?, data: UnsafeMutablePointer<Finger>?, count: Int, deviceTime: Double) {
+        lock.lock(); defer { lock.unlock() }
+        let key = UInt(bitPattern: device)
+        let saved = states[key] ?? DeviceState()
+        tracked = saved.tracked; episode = saved.episode; armed = saved.armed
+        defer { states[key] = DeviceState(tracked: tracked, episode: episode, armed: armed) }
+        // Time everything with the system clock, not the frame's timestamp:
+        // each device has its own timebase, and a reconnected Bluetooth trackpad
+        // restarts near zero — which left the shared cooldown stuck in the future.
+        process(data: data, count: count, timestamp: ProcessInfo.processInfo.systemUptime)
+    }
+
+    private func process(data: UnsafeMutablePointer<Finger>?, count: Int, timestamp now: Double) {
+        guard enabled else { tracked.removeAll(); episode = nil; return }
         guard let data = data else { return }
         cfg = ConfigStore.shared.current
 
