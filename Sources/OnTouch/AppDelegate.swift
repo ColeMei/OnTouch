@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -8,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let scrollMonitor = ScrollMonitor()
     private let clickSuppressor = ClickSuppressor()
     private var enableItem: NSMenuItem!
+    private var loginItem: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenu()
@@ -46,6 +48,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
+        loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        loginItem.target = self
+        menu.addItem(loginItem)
+        refreshLoginItem()
+        menu.addItem(.separator())
+
         let ax = NSMenuItem(title: "Open Accessibility Settings…", action: #selector(openAccessibility), keyEquivalent: "")
         ax.target = self
         menu.addItem(ax)
@@ -78,6 +86,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleEnabled() {
         GestureEngine.shared.enabled.toggle()
         enableItem.state = GestureEngine.shared.enabled ? .on : .off
+    }
+
+    // MARK: Launch at login
+
+    /// Only the installed copy may register itself — a dev build run from the
+    /// repo would otherwise become the login item.
+    private var isInstalled: Bool {
+        let path = Bundle.main.bundlePath
+        return path.hasPrefix("/Applications/")
+            || path.hasPrefix(NSHomeDirectory() + "/Applications/")
+    }
+
+    private func refreshLoginItem() {
+        guard isInstalled else {
+            loginItem.title = "Launch at Login (run ./install.sh first)"
+            loginItem.action = nil      // menus auto-enable items that have an action
+            loginItem.state = .off
+            return
+        }
+        switch SMAppService.mainApp.status {
+        case .enabled:          loginItem.state = .on;    loginItem.title = "Launch at Login"
+        case .requiresApproval: loginItem.state = .mixed; loginItem.title = "Launch at Login (approve in Settings)"
+        default:                loginItem.state = .off;   loginItem.title = "Launch at Login"
+        }
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        let service = SMAppService.mainApp
+        do {
+            if service.status == .enabled {
+                try service.unregister()
+            } else {
+                try service.register()
+            }
+        } catch {
+            NSLog("OnTouch: launch-at-login change failed: \(error)")
+        }
+        if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+        refreshLoginItem()
     }
 
     // MARK: Permissions

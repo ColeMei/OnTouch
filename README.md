@@ -5,6 +5,10 @@
 <h1 align="center">OnTouch</h1>
 
 <p align="center">
+  A personal fork of <a href="https://github.com/effyon/OnTouch">effyon/OnTouch</a>.
+</p>
+
+<p align="center">
   Jitouch-style <b>anchored trackpad gestures</b> for switching and closing
   browser tabs on macOS.
 </p>
@@ -87,11 +91,13 @@ in *any* app — e.g. `{"...": "...", "action": "cmd+l"}` to focus the address b
 ## Build & run
 
 ```sh
-./build.sh        # compiles + assembles OnTouch.app (ad-hoc signed)
-open OnTouch.app
+./install.sh      # build, sign, copy to /Applications, (re)launch
 ```
 
-Or run in the foreground to watch logs (`./run.sh`). The app lives in the menu
+Without an admin account it installs to `~/Applications` instead (override
+with `INSTALL_DIR=…`). `./build.sh` alone assembles `OnTouch.app` in the repo; `./run.sh` runs that
+copy in the foreground to watch logs. Set up [signing](#signing) first, or
+every rebuild needs its permissions re-granted. The app lives in the menu
 bar (hand icon + "OnTouch" label); there is no Dock icon.
 
 > **Can't see the menu-bar item?** On MacBooks with a notch, menu-bar icons can
@@ -99,38 +105,66 @@ bar (hand icon + "OnTouch" label); there is no Dock icon.
 > or use a menu-bar manager (e.g. Bartender/Ice) to reveal it. The "OnTouch"
 > text label makes it easier to spot.
 
-## Install & run at login
+## Signing
 
-Copy the app into `/Applications` and register a LaunchAgent so it starts
-automatically each time you log in:
+macOS ties Accessibility / Input Monitoring grants to the app's code signature.
+An ad-hoc signature is identified by the binary's hash, so every rebuild looks
+like a new app and the grants silently stop applying. Signing with a stable
+certificate fixes that: grant once, rebuild freely.
 
-```sh
-./build.sh
-cp -R OnTouch.app /Applications/
-cp com.local.ontouch.plist ~/Library/LaunchAgents/
-launchctl load -w ~/Library/LaunchAgents/com.local.ontouch.plist
-```
-
-To stop it autostarting:
+`build.sh` signs with the identity named by `SIGN_IDENTITY` (default
+`OnTouch Local Signing`) and falls back to ad-hoc with a warning. A
+self-signed certificate is enough for local use; create it once:
 
 ```sh
-launchctl unload -w ~/Library/LaunchAgents/com.local.ontouch.plist
-rm ~/Library/LaunchAgents/com.local.ontouch.plist
+cat > /tmp/ontouch-cert.cnf <<'CNF'
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+CN = OnTouch Local Signing
+[ext]
+basicConstraints = critical,CA:false
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+CNF
+cd "$(mktemp -d)"
+/usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+  -config /tmp/ontouch-cert.cnf -keyout key.pem -out cert.pem
+P=$(/usr/bin/openssl rand -hex 16)
+/usr/bin/openssl pkcs12 -export -inkey key.pem -in cert.pem \
+  -name "OnTouch Local Signing" -passout pass:$P -out id.p12
+security import id.p12 -k ~/Library/Keychains/login.keychain-db -P "$P" -T /usr/bin/codesign
 ```
+
+Then delete the temporary key files. `security find-identity -p codesigning`
+lists it as `CSSMERR_TP_NOT_TRUSTED` — that's expected and doesn't matter for
+local signing. Check a build with `codesign -dr - OnTouch.app`: the designated
+requirement should name `certificate leaf`, not `cdhash`.
+
+## Launch at login
+
+Install with `./install.sh`, then choose **Launch at Login** from the menu-bar
+menu. It registers through macOS Login Items (System Settings → General →
+Login Items), where you can also turn it off. Only an installed copy (in
+`/Applications` or `~/Applications`) can register itself.
 
 ## Permissions (first launch)
 
 macOS will prompt for two permissions. Grant both, then **quit and relaunch**:
 
-1. **Accessibility** — lets the app post keystrokes to Safari.
+1. **Accessibility** — lets the app post keystrokes to the target apps.
    System Settings → Privacy & Security → Accessibility.
 2. **Input Monitoring** — lets it read raw multitouch data.
    System Settings → Privacy & Security → Input Monitoring.
 
 The menu has shortcuts to open both panes. Add `OnTouch.app` and toggle it on.
 
-> The app is ad-hoc signed, so its permission grants survive rebuilds (same
-> bundle identifier `com.local.ontouch`). If you move the `.app`, re-grant.
+> If the toggles are on but gestures do nothing (or macOS keeps re-prompting),
+> the grants belong to an older signature. Quit OnTouch, run
+> `tccutil reset Accessibility dev.colemei.ontouch` and
+> `tccutil reset ListenEvent dev.colemei.ontouch`, then relaunch and grant again.
 
 ## Tuning
 
@@ -158,7 +192,8 @@ Distances are normalized trackpad units (0–1); times are in seconds.
   under the cursor belongs to a target app.
 - `TypingMonitor` / `ScrollMonitor` — pause gestures while you type or scroll.
 - `ClickSuppressor` — event tap that drops the click a gesture-tap would cause.
-- `AppDelegate` — menu-bar UI, enable/disable toggle, permission shortcuts.
+- `AppDelegate` — menu-bar UI, enable/disable and launch-at-login toggles,
+  permission shortcuts.
 
 The images in `docs/` are generated, not screenshots — regenerate them with:
 
@@ -200,8 +235,7 @@ public knowledge reproduced across many open-source multitouch readers.
 
 ## License
 
-[MIT](LICENSE) — do whatever you like, just keep the copyright notice. Remember
-to put your name in the `LICENSE` file.
+[MIT](LICENSE). Original work © effyon; fork changes © Cole Mei.
 
 ## Caveats / next steps
 
