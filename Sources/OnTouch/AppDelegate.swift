@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             closePopover()
         } else {
+            AppStatus.shared.frontApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }

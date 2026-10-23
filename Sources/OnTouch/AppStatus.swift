@@ -22,6 +22,9 @@ final class AppStatus: ObservableObject {
     /// The user's on/off switch; false while paused too.
     @Published private(set) var gesturesOn = true
     @Published private(set) var pausedUntil: Date?
+    /// The app in front when the popover opened (OnTouch's own popover takes
+    /// focus, so it's captured just before).
+    @Published var frontApp: String?
 
     /// True when gestures can actually reach apps.
     var isWorking: Bool { accessibility && inputMonitoring && trackpads > 0 }

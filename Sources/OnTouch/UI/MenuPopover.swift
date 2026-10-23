@@ -185,11 +185,27 @@ struct MenuPopover: View {
                 } else if status.gesturesOn {
                     MenuRow(title: "Pause for 1 Hour") { status.pause(for: 3600) }
                 }
+                appPauseRow
             }
             MenuRow(title: "Quit", shortcut: "⌘Q", action: actions.quit)
                 .keyboardShortcut("q", modifiers: .command)
         }
         .padding(6)
+    }
+}
+
+extension MenuPopover {
+    /// "Pause in Chrome" for the app in front, or "Resume in Chrome" once it's
+    /// paused. Pausing switches the app off in Settings until resumed.
+    @ViewBuilder var appPauseRow: some View {
+        if let id = status.frontApp, !status.config.targetBundleIDs.contains("*") {
+            let name = AppNames.name(id)
+            if status.config.targetBundleIDs.contains(id) {
+                MenuRow(title: "Pause in \(name)") { ConfigEdits.setApp(id, enabled: false) }
+            } else if status.config.disabledBundleIDs.contains(id) {
+                MenuRow(title: "Resume in \(name)") { ConfigEdits.setApp(id, enabled: true) }
+            }
+        }
     }
 }
 

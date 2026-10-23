@@ -16,8 +16,8 @@ struct GeneralSettings: View {
             Section {
                 permissionRow("Accessibility", granted: status.accessibility, pane: "Privacy_Accessibility")
                 permissionRow("Input Monitoring", granted: status.inputMonitoring, pane: "Privacy_ListenEvent")
-                LabeledContent("Trackpads") {
-                    Text("\(status.trackpads)").foregroundStyle(status.trackpads > 0 ? Color.secondary : Color.orange)
+                if status.trackpads == 0 {
+                    LabeledContent("Trackpad") { Text("Not found").foregroundStyle(.orange) }
                 }
             }
 
