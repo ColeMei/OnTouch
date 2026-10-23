@@ -44,6 +44,7 @@ final class GestureEngine {
         var curPos: CGPoint
         var maxDisp: CGFloat
         var lastSeen: Double
+        var shape = TestMonitor.Shape()   // contact ellipse, for the Test tab only
     }
 
     /// One run of acting (non-anchor) fingers, from first touch to last lift.
@@ -68,6 +69,7 @@ final class GestureEngine {
     private var episode: Episode?
     private var armed = true     // re-armed once acting fingers clear
     private var cooldownUntil: Double = 0   // shared: one action per cooldown, any trackpad
+    private var deviceKey: UInt = 0         // the trackpad whose frame is being processed
 
     /// Forget all touches, e.g. when the devices are reopened.
     func reset() {
@@ -82,6 +84,7 @@ final class GestureEngine {
     func handleFrame(device: MTDeviceRef?, data: UnsafeMutablePointer<Finger>?, count: Int, deviceTime: Double) {
         lock.lock(); defer { lock.unlock() }
         let key = UInt(bitPattern: device)
+        deviceKey = key
         let saved = states[key] ?? DeviceState()
         tracked = saved.tracked; episode = saved.episode; armed = saved.armed
         defer { states[key] = DeviceState(tracked: tracked, episode: episode, armed: armed) }
@@ -108,10 +111,12 @@ final class GestureEngine {
                 t.curPos = pos
                 t.maxDisp = max(t.maxDisp, hypot(pos.x - t.startPos.x, pos.y - t.startPos.y))
                 t.lastSeen = now
+                t.shape = TestMonitor.Shape(f)
                 tracked[f.identifier] = t
             } else {
                 tracked[f.identifier] = Touch(id: f.identifier, startTime: now,
-                                              startPos: pos, curPos: pos, maxDisp: 0, lastSeen: now)
+                                              startPos: pos, curPos: pos, maxDisp: 0, lastSeen: now,
+                                              shape: TestMonitor.Shape(f))
             }
         }
         Self.liveFingerCount = currentIDs.count
@@ -152,6 +157,13 @@ final class GestureEngine {
         let acting = present.filter { $0.id != anchor?.id && !isResting($0) }
         let actingLifted = lifted.filter { $0.id != anchor?.id && !isResting($0) }
         let frameMaxDisp = (acting.map { $0.maxDisp } + actingLifted.map { $0.maxDisp }).max() ?? 0
+
+        if TestMonitor.active {
+            TestMonitor.setTouches(present.map {
+                TestMonitor.Touch(id: $0.id, pos: $0.curPos, shape: $0.shape,
+                                  role: $0.id == anchor?.id ? .anchor : isResting($0) ? .resting : .acting)
+            }, device: deviceKey, time: now)
+        }
 
         // A gesture is "in progress" only when an eligible anchor is planted and
         // another finger is acting — that's what arms click suppression.
@@ -201,10 +213,24 @@ final class GestureEngine {
 
         // 6b. Tap — fires when the acting fingers have all lifted.
         if acting.isEmpty, let ep = episode {
-            if canFireTap, !ep.fired,
-               (now - ep.start) <= cfg.tapMaxDuration, ep.maxDisp <= cfg.tapMaxMove {
-                let dir = tapDirection(ep.centroid, anchor: anchorLeads ? anchor : nil)
-                trigger(anchor: anchorLeads, fingers: ep.peak, type: "tap", direction: dir, now)
+            let duration = now - ep.start
+            let dir = tapDirection(ep.centroid, anchor: anchorLeads ? anchor : nil)
+            if canFireTap, !ep.fired, duration <= cfg.tapMaxDuration, ep.maxDisp <= cfg.tapMaxMove {
+                if !trigger(anchor: anchorLeads, fingers: ep.peak, type: "tap", direction: dir, now), anchorLeads {
+                    missed(ep, dir, dir == "none" ? "Too close to the held finger" : "No gesture set",
+                           fix: dir == "none" ? "tapMinSep" : nil)
+                }
+            } else if anchorLeads, !ep.fired, armed, now >= cooldownUntil {
+                // An anchored tap that didn't count — say why, for the Test tab.
+                if TypingMonitor.isTyping(window: cfg.typingGuard) {
+                    missed(ep, dir, "Paused after typing", fix: "typingGuard")
+                } else if ScrollMonitor.isScrolling(window: cfg.scrollGuard) {
+                    missed(ep, dir, "Paused after scrolling", fix: "scrollGuard")
+                } else if ep.maxDisp > cfg.tapMaxMove, ep.maxDisp < cfg.swipeDist {
+                    missed(ep, dir, "Moved too far for a tap", fix: "tapMaxMove")
+                } else if ep.maxDisp <= cfg.tapMaxMove, duration > cfg.tapMaxDuration {
+                    missed(ep, dir, "Held too long for a tap", fix: "tapMaxDuration")
+                }
             }
             episode = nil
         }
@@ -251,6 +277,14 @@ final class GestureEngine {
         }
     }
 
+    /// Reports a tap that almost counted to the Test tab.
+    private func missed(_ ep: Episode, _ dir: String, _ why: String, fix key: String?) {
+        guard TestMonitor.active else { return }
+        let fix = key.flatMap { k in TestMonitor.loosened(k, in: cfg).map { (key: k, value: $0) } }
+        TestMonitor.report(.init(fingers: ep.peak, type: "tap", direction: dir,
+                                 outcome: .missed, text: why, fix: fix))
+    }
+
     // MARK: - Matching & firing
 
     /// Runs the binding for this gesture in the app under the cursor: an
@@ -271,15 +305,21 @@ final class GestureEngine {
         guard everyApp || app.map(cfg.targetBundleIDs.contains) == true else {
             Log.write("skipped \(gesture) — \(app ?? "unknown app") isn't a target")
             if let app { DispatchQueue.main.async { AppStatus.shared.recordSkip(app: app) } }
+            TestMonitor.report(.init(fingers: fingers, type: type, direction: direction,
+                                     outcome: .notTarget, text: "", app: app))
             return true
         }
         let specific = app.flatMap { app in bound.first { $0.apps?.contains(app) == true } }
         guard let m = specific ?? bound.first(where: { $0.apps == nil }) else {
             Log.write("skipped \(gesture) — not bound in \(app ?? "unknown app")")
+            TestMonitor.report(.init(fingers: fingers, type: type, direction: direction,
+                                     outcome: .missed, text: "Off in this app", app: app))
             return true
         }
 
         Log.write("\(gesture) → \(m.action) in \(app ?? "unknown app")")
+        TestMonitor.report(.init(fingers: fingers, type: type, direction: direction,
+                                 outcome: .fired, text: Keys.title(for: m.action), app: app))
         actions.perform(action: m.action)
         cooldownUntil = now + cfg.cooldown
         armed = false

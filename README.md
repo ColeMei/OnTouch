@@ -66,6 +66,10 @@ off in Settings → General, or `"haptics": false`). Gestures you keep trying in
 an app that isn't a target add up; after five, the menu-bar popover offers to
 add that app.
 
+Settings → **Test** shows the fingers OnTouch sees live and what it made of
+your last few gestures. A tap that almost counted says why ("Moved too far for
+a tap") with a **Loosen** button that relaxes that one threshold.
+
 Every binding is editable — see [Custom gestures](#custom-gestures).
 
 ## Custom gestures

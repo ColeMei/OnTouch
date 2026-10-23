@@ -43,5 +43,7 @@ void MTUnregisterContactFrameCallback(MTDeviceRef device, MTContactCallbackFunct
 void MTDeviceStart(MTDeviceRef device, int unknown);
 void MTDeviceStop(MTDeviceRef device);
 bool MTDeviceIsRunning(MTDeviceRef device);
+// Touch surface size in hundredths of a millimetre.
+int  MTDeviceGetSensorSurfaceDimensions(MTDeviceRef device, int *width, int *height);
 
 #endif /* CMULTITOUCH_H */

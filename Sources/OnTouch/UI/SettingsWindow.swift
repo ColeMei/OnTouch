@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The Settings window: General and Gestures tabs in a preference-style
+/// The Settings window: General, Gestures and Test tabs in a preference-style
 /// toolbar. Every tab has the same fixed size, so switching never resizes it.
 final class SettingsWindowController: NSWindowController {
     static let contentSize = NSSize(width: 880, height: 520)
@@ -13,6 +13,8 @@ final class SettingsWindowController: NSWindowController {
                                      GeneralSettings(status: AppStatus.shared)))
         tabs.addTabViewItem(Self.tab("Gestures", symbol: "hand.tap",
                                      GesturesSettings(status: AppStatus.shared)))
+        tabs.addTabViewItem(Self.tab("Test", symbol: "scope",
+                                     TestSettings(status: AppStatus.shared)))
 
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable, .miniaturizable]
