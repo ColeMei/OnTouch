@@ -24,6 +24,7 @@ struct MenuPopover: View {
                 if !status.configIssues.isEmpty {
                     problemRow("Config problem", button: "Show", action: actions.showConfigFile)
                 }
+                if let s = status.suggestion { suggestionRow(s) }
                 gestureList
             }
             Divider().padding(.top, 8)
@@ -104,6 +105,34 @@ struct MenuPopover: View {
         .background(RoundedRectangle(cornerRadius: 9).fill(Color.orange.opacity(0.12)))
         .padding(.horizontal, 10)
         .padding(.bottom, 4)
+    }
+
+    // MARK: Suggestion
+
+    /// "Slack · Tried 12× · Add": an app gestures keep being tried in.
+    private func suggestionRow(_ s: AppStatus.Suggestion) -> some View {
+        HStack(spacing: 10) {
+            AppIcon(bundleID: s.bundleID).frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(AppNames.name(s.bundleID)).font(.system(size: 13)).lineLimit(1)
+                Text("Tried \(s.tries)×").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Add") { status.acceptSuggestion(s.bundleID) }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            Button { status.dismissSuggestion(s.bundleID) } label: {
+                Image(systemName: "xmark").font(.system(size: 10, weight: .semibold))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 42)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Color.accentColor.opacity(0.1)))
+        .padding(.horizontal, 10)
+        .padding(.bottom, 6)
     }
 
     // MARK: Gestures

@@ -80,4 +80,53 @@ final class AppStatus: ObservableObject {
     func recordGesture(action: String, app: String?) {
         lastGesture = LastGesture(action: action, app: app, date: Date())
     }
+
+    // MARK: App suggestions
+
+    /// An app gestures were tried in that isn't a target yet.
+    struct Suggestion: Equatable {
+        let bundleID: String
+        let tries: Int
+    }
+
+    /// Gestures tried in an app this often before it's suggested.
+    static let suggestAfter = 5
+
+    /// Tries per non-target app, kept across launches (they add up over days).
+    private var skips: [String: Int] = UserDefaults.standard.dictionary(forKey: "skippedTries") as? [String: Int] ?? [:] {
+        didSet { UserDefaults.standard.set(skips, forKey: "skippedTries") }
+    }
+    private var dismissed: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "dismissedSuggestions") ?? []) {
+        didSet { UserDefaults.standard.set(Array(dismissed), forKey: "dismissedSuggestions") }
+    }
+
+    /// The most-tried app worth suggesting, if any. Read again on every config
+    /// change, so an app added in Settings stops being suggested.
+    var suggestion: Suggestion? {
+        let known = Set(config.targetBundleIDs + config.disabledBundleIDs)
+        return skips
+            .filter { $0.value >= Self.suggestAfter && !known.contains($0.key) && !dismissed.contains($0.key) }
+            .max { $0.value < $1.value }
+            .map { Suggestion(bundleID: $0.key, tries: $0.value) }
+    }
+
+    func recordSkip(app: String) {
+        // Only real apps: menu-bar helpers, Notification Center, and OnTouch's
+        // own windows aren't places anyone means to switch tabs.
+        guard NSRunningApplication.runningApplications(withBundleIdentifier: app)
+                .first?.activationPolicy == .regular else { return }
+        objectWillChange.send()
+        skips[app, default: 0] += 1
+    }
+
+    func dismissSuggestion(_ id: String) {
+        objectWillChange.send()
+        dismissed.insert(id)
+    }
+
+    func acceptSuggestion(_ id: String) {
+        objectWillChange.send()
+        skips[id] = nil
+        ConfigEdits.setApp(id, enabled: true)
+    }
 }

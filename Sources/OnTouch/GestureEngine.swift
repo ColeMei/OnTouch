@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import CoreGraphics
 import CMultitouch
 
@@ -269,6 +270,7 @@ final class GestureEngine {
         let everyApp = cfg.targetBundleIDs.isEmpty || cfg.targetBundleIDs.contains("*")
         guard everyApp || app.map(cfg.targetBundleIDs.contains) == true else {
             Log.write("skipped \(gesture) — \(app ?? "unknown app") isn't a target")
+            if let app { DispatchQueue.main.async { AppStatus.shared.recordSkip(app: app) } }
             return true
         }
         let specific = app.flatMap { app in bound.first { $0.apps?.contains(app) == true } }
@@ -282,7 +284,13 @@ final class GestureEngine {
         cooldownUntil = now + cfg.cooldown
         armed = false
         if m.action != Keys.none {
-            DispatchQueue.main.async { AppStatus.shared.recordGesture(action: m.action, app: app) }
+            let haptics = cfg.haptics
+            DispatchQueue.main.async {
+                // A light tick under the fingers confirms the gesture without
+                // anything on screen (Force Touch trackpads only).
+                if haptics { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
+                AppStatus.shared.recordGesture(action: m.action, app: app)
+            }
         }
         return true
     }

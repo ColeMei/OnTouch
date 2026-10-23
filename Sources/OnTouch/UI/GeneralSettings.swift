@@ -33,6 +33,10 @@ struct GeneralSettings: View {
                         // Off: zero the edge strips. On: drop the keys to restore defaults.
                         ConfigStore.shared.update(Dictionary(uniqueKeysWithValues: zones.map { ($0, on ? nil : 0 as Any?) }))
                     }))
+                Toggle("Haptic feedback", isOn: Binding(
+                    get: { status.config.haptics },
+                    // On is the default, so drop the key rather than store it.
+                    set: { ConfigStore.shared.update(["haptics": $0 ? nil : false as Any?]) }))
             }
 
             Section {

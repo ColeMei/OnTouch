@@ -74,6 +74,8 @@ struct Config: Codable {
     // Pause gestures for this long after scrolling, so the touches between
     // scroll strokes aren't mistaken for tab-switch taps.
     var scrollGuard: Double = 0.4
+    // A light haptic tick when a gesture fires (Force Touch trackpads).
+    var haptics: Bool = true
     // Apps where gestures act — nothing fires anywhere else, app-specific
     // bindings included. Use ["*"] to act in every app (riskier — a stray
     // gesture can fire shortcuts into text fields). Default: browsers + Finder,
@@ -121,6 +123,7 @@ struct Config: Codable {
         d.cooldown        = try c.decodeIfPresent(Double.self, forKey: .cooldown)        ?? d.cooldown
         d.typingGuard     = try c.decodeIfPresent(Double.self, forKey: .typingGuard)     ?? d.typingGuard
         d.scrollGuard     = try c.decodeIfPresent(Double.self, forKey: .scrollGuard)     ?? d.scrollGuard
+        d.haptics         = try c.decodeIfPresent(Bool.self,   forKey: .haptics)         ?? d.haptics
         d.targetBundleIDs = try c.decodeIfPresent([String].self, forKey: .targetBundleIDs) ?? d.targetBundleIDs
         d.disabledBundleIDs = try c.decodeIfPresent([String].self, forKey: .disabledBundleIDs) ?? d.disabledBundleIDs
         d.mappings        = try c.decodeIfPresent([Mapping].self, forKey: .mappings)     ?? d.mappings

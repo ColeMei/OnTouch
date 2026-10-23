@@ -61,6 +61,11 @@ interfering with normal use:
   swallows the "tap to click", so a tap-to-switch-tabs won't click a link under
   the pointer. A resting thumb plus an ordinary click still clicks through.
 
+When a gesture fires, Force Touch trackpads give a light haptic tick (turn it
+off in Settings → General, or `"haptics": false`). Gestures you keep trying in
+an app that isn't a target add up; after five, the menu-bar popover offers to
+add that app.
+
 Every binding is editable — see [Custom gestures](#custom-gestures).
 
 ## Custom gestures
